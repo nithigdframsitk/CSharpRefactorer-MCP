@@ -36,7 +36,7 @@ class CSharpRefactorer {
     
     // Group 1: The full signature text.
     // Group 2: The method name.
-    const methodPattern = /\s*((?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|virtual|override|async)\s+)+.+?\s+([\w<>]+)\s*(?<params>\((?:[^()]|(\?&params))*\))(?:[\s\n]*where\s+[^\{]*)?)(?=\s*\{)/gm;
+    const methodPattern = /\s*((?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|virtual|override|async))\s+[\w<>\s]*\s+([\w<>]+)\s*(?<params>\((?:[^()]|(\?&params))*\))(?:[\s\n]*where\s+[^\{]*)?)(?=\s*\{)/gm;
     
     let match;
     let matchNum = 1;
@@ -280,7 +280,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             source_file: {
               type: 'string',
-              description: 'Path to the C# source file to split',
+              description: 'Absolute full Path to the C# source file to analyze. Ex: C:\\Users\\NithiDhanasekaran\\source\\repos\\Framsikt Product Development\\Framsikt\\Framsikt.BL\\ActionImport.cs',
             },
             destination_folder: {
               type: 'string',
@@ -290,18 +290,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               description: 'New namespace for the partial classes',
             },
-            main_partial_class_name: {
+            main_partial_class_file_name: {
               type: 'string',
-              description: 'Name of the main partial class file',
+              description: 'Name of the main partial class file. Ex: MonthlyReportingExportHelper.Core.cs',
             },
             main_interface: {
               type: 'string',
-              description: 'Main interface to implement (optional)',
+              description: 'Main interface to implement (optional). Ex: IMonthlyReportingExportHelper',
               default: '',
             },
             partial_classes: {
               type: 'array',
-              description: 'Array of partial class configurations',
+              description: 'Array of partial class configurations. Use this to group methods into partial classes by functionality and business logic.',
               items: {
                 type: 'object',
                 properties: {
@@ -334,7 +334,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             'source_file',
             'destination_folder',
             'new_namespace',
-            'main_partial_class_name',
+            'main_partial_class_file_name',
             'partial_classes',
           ],
         },
@@ -347,7 +347,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             source_file: {
               type: 'string',
-              description: 'Path to the C# source file to analyze',
+              description: 'Absolute full Path to the C# source file to analyze. Ex: C:\\Users\\NithiDhanasekaran\\source\\repos\\Framsikt Product Development\\Framsikt\\Framsikt.BL\\ActionImport.cs',
             },
           },
           required: ['source_file'],
@@ -368,7 +368,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         source_file,
         destination_folder,
         new_namespace,
-        main_partial_class_name,
+        main_partial_class_file_name,
         main_interface = '',
         partial_classes,
       } = args;
@@ -399,10 +399,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // Generate main partial class file
-      const mainFilePath = path.join(destination_folder, main_partial_class_name);
+      const mainFilePath = path.join(destination_folder, main_partial_class_file_name);
       const mainContent = refactorer.generateMainPartialClass(
         new_namespace,
-        main_partial_class_name,
+        main_partial_class_file_name,
         main_interface
       );
 
