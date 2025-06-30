@@ -33,10 +33,11 @@ class CSharpRefactorer {
    */
   parseCSharpMethods(sourceCode) {
     const methods = {};
+    const methodsWithRawKey = {};
 
     // Group 1: The full signature text.
     // Group 2: The method name.
-    const methodPattern = /\s*((?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|virtual|override|async))\s+[\w<,>\s]*\s+([\w<>]+)\s*(?<params>\((?:[^()]|(\?&params))*\))(?:[\s\n]*where\s+[^\{]*)?)(?=\s*\{)/gm;
+    const methodPattern = /^(?!#|$)\s*((?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|virtual|override|async))\s+[\w<,>\s]*\s+([\w<>]+)\s*(?<params>\((?:[^()]|(\?&params))*\))(?:[\s\n]*where\s+[^\{]*)?)(?=\s*\{)/gm;
 
     let match;
     let matchNum = 1;
@@ -100,6 +101,7 @@ class CSharpRefactorer {
             console.warn(`Warning: Duplicate method signature found: '${signatureKey}'. Overwriting.`);
           }
           methods[signatureKey] = (commentBlock.includes(this.classDeclaration) ? "" : commentBlock) + methodText;
+          methodsWithRawKey[fullSignatureRaw] = (commentBlock.includes(this.classDeclaration) ? "" : commentBlock) + methodText;
 
           // Exit the inner loop and find the next method
           break;
@@ -108,6 +110,7 @@ class CSharpRefactorer {
       matchNum++;
     }
 
+    this.methodsWithRawKey = methodsWithRawKey;
     return methods;
   }
 
@@ -192,28 +195,23 @@ class CSharpRefactorer {
 
     // Write methods
     for (const methodInfo of partialClassConfig.methods) {
-      let signature = `${methodInfo.accessor || 'public'} `;
-      if (methodInfo.static) {
-        signature += 'static ';
-      }
-      if (methodInfo.async) {
-        signature += 'async ';
-      }
-      signature += `${methodInfo.returnType || 'void'} ${methodInfo.name}`;
-
-      if (methodInfo.arguments) {
-        signature += `(${methodInfo.arguments.join(', ')})`;
-      } else {
-        signature += '()';
-      }
+      let [signature, signature1] = this.GetSignature(methodInfo);
 
       // Find the matching method in this.methods
       let matchingMethod = null;
       for (const [storedSignature, methodBody] of Object.entries(this.methods)) {
         const normalizedStored = storedSignature.replace(/\s+/g, '').trim();
         const normalizedConstructed = signature.replace(/\s+/g, '').trim();
+        const normalizedConstructed1 = signature1.replace(/\s+/g, '').trim();
+
         if (normalizedStored.includes(normalizedConstructed) ||
           normalizedStored.endsWith(normalizedConstructed)) {
+          matchingMethod = methodBody;
+          break;
+        }
+
+        if (normalizedStored.includes(normalizedConstructed1) ||
+          normalizedStored.endsWith(normalizedConstructed1)) {
           matchingMethod = methodBody;
           break;
         }
@@ -229,7 +227,7 @@ class CSharpRefactorer {
         this.otherMembers = this.otherMembers.replace(matchingMethod, '');
       } else {
         await fs.writeFile("C:\\Tools\\MCP-Servers\\debug", JSON.stringify(this.methods));
-        throw new Error(`Method '${signature}' not found in source code. Check method signature in the config, they must exactly match with source code (case-sensitive).`);
+        // throw new Error(`Method '${signature}' not found in source code. Check method signature in the config, they must exactly match with source code (case-sensitive).`);
       }
     }
 
@@ -239,7 +237,43 @@ class CSharpRefactorer {
     content = content.replace(/#endregion/g, '//#endregion');
     content = content.replace(/#region/g, '//#region');
 
+    content = content.replace(/^\n\n/, /\n/); // Remove extra newlines
+
     return content;
+  }
+
+  GetSignature(methodInfo) {
+    let signature = `${methodInfo.accessor || 'public'} `;
+    let signature1 = `${methodInfo.accessor || 'public'} `;
+
+    if (methodInfo.static) {
+      signature += 'static ';
+    }
+
+    if (methodInfo.async) {
+      signature += 'async ';
+    }
+
+    if (methodInfo.async) {
+      signature1 += 'async ';
+    }
+
+    if (methodInfo.static) {
+      signature1 += 'static ';
+    }
+
+    signature += `${methodInfo.returnType || 'void'} ${methodInfo.name}`;
+    signature1 += `${methodInfo.returnType || 'void'} ${methodInfo.name}`;
+
+    if (methodInfo.arguments) {
+      signature += `(${methodInfo.arguments.join(', ')})`;
+      signature1 += `(${methodInfo.arguments.join(', ')})`;
+    } else {
+      signature += '()';
+      signature1 += '()';
+    }
+
+    return [signature, signature1];
   }
 
   /**
@@ -306,12 +340,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 {
                     "accessor": "public",
                     "returnType": "void",
+                    "static": true, // Optional, defaults to false. Must be Set to true if method is static
+                    "async": true, // Optional, defaults to false. Must be Set to true if method is async
                     "name": "MethodOne",
-                    "arguments": ["string arg1", "int arg2"]
+                    "arguments": ["string arg1", "int arg2 = 1"]
                 },
                 {
                     "accessor": "private",
-                    "async": true,
+                    "static": true, // Optional, defaults to false. Must be Set to true if method is static
+                    "async": true, // Optional, defaults to false. Must be Set to true if method is async                    
                     "returnType": "Task<string>",
                     "name": "MethodTwo"
                 }
@@ -323,10 +360,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             "methods": [
                 {
                     "accessor": "public",
-                    "static": true,
+                    "static": true, // Optional, defaults to false. Must be Set to true if method is static
+                    "async": true, // Optional, defaults to false. Must be Set to true if method is async    
                     "returnType": "bool",
                     "name": "MethodThree",
-                    "arguments": ["string someArg"]
+                    "arguments": ["string someArg = 'value'"]
                 }
             ]
         }
@@ -377,7 +415,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Read and parse the configuration file
       return await ProcessSplitCSharpclass(config_file);
     } else if (name === 'list_csharp_methods') {
-      listCSharpMethods(args.source_file);
+      return await listCSharpMethods(args.source_file);
     } else {
       return {
         content: [
@@ -424,7 +462,7 @@ async function listCSharpMethods(source_file) {
   methodsInfo.push('='.repeat(50));
 
   let i = 1;
-  for (const [signature, methodBody] of Object.entries(refactorer.methods)) {
+  for (const [signature, methodBody] of Object.entries(refactorer.methodsWithRawKey)) {
     // Extract method name from signature
     const nameMatch = signature.match(/\b(\w+)\s*\(/);
     const methodName = nameMatch ? nameMatch[1] : 'Unknown';
@@ -462,7 +500,7 @@ async function ProcessSplitCSharpclass(config_file) {
   const requiredKeys = ['sourceFile', 'destinationFolder', 'newNamespace', 'mainPartialClassName', 'partialClasses'];
   for (const key of requiredKeys) {
     if (!config[key]) {
-      throw new Error(`Configuration file "${config_file}" is missing required key: "${key}"`);
+      throw new Error(`Configuration file "${config_file}" is missing required key: "${key}". value should not be empty.`);
     }
   }
 
@@ -471,6 +509,38 @@ async function ProcessSplitCSharpclass(config_file) {
 
   // Parse source file
   await refactorer.parseSourceFile(source_file);
+
+  // if partial_classes dont have all the methods from the parsed source file, throw an error
+  const allMethods = Object.keys(refactorer.methods);
+  const methodsWithRawKey = Object.keys(refactorer.methodsWithRawKey);
+  let i = 0;
+  
+  var errors = [];
+
+  for (const method in allMethods) {
+    i++;
+    const methodSignature = allMethods[method];
+    const foundInPartial = partial_classes.some(partialClass =>
+      partialClass.methods.some(m => {
+        // const constructedSignature = `${m.accessor || 'public'} ${m.static ? 'static': ''} ${m.async ? 'async': ''} ${m.returnType || 'void'} ${m.name}(${m.arguments ? m.arguments.join(', ') : ''})`;
+        // const constructedSignature1 = `${m.accessor || 'public'} ${m.async ? 'async': ''} ${m.static ? 'static': ''} ${m.returnType || 'void'} ${m.name}(${m.arguments ? m.arguments.join(', ') : ''})`;
+
+        var [constructedSignature, constructedSignature1] = refactorer.GetSignature(m);
+
+        var includes = methodSignature.replace(/\s+/g, '').includes(constructedSignature.replace(/\s+/g, ''));
+        var includes1 = methodSignature.replace(/\s+/g, '').includes(constructedSignature1.replace(/\s+/g, ''));
+
+        return includes || includes1;
+      })
+    );
+    if (!foundInPartial) {
+      errors.push(`'${methodsWithRawKey[i-1]}'\n`);
+    }
+  }
+
+  if(errors.length > 0) {
+    // throw new Error(`Following methods are not found in any partial class configuration. Ensure all methods are included in the 'partialClasses' array. "${config_file}":\n${errors.join('\n')}`);
+  }
 
   // Create destination folder if it doesn't exist
   await fs.mkdir(destination_folder, { recursive: true });
@@ -484,6 +554,12 @@ async function ProcessSplitCSharpclass(config_file) {
 
     // Generate content for the partial class file
     const content = await refactorer.generatePartialClass(partialClass, new_namespace);
+
+    // Get no of lines in the content
+    const lineCount = content.split('\n').length;
+    if(lineCount > 5000) {
+      // throw new Error(`Generated partial file ${fileName} exceeds 5000 lines. Please split the methods into smaller groups in the configuration.`);
+    }
 
     // Write content to file
     await fs.writeFile(filePath, content, 'utf-8');
@@ -522,8 +598,8 @@ async function main() {
 // Run the server if this file is executed directly
 if (require.main === module) {
 
-  // ProcessSplitCSharpclass("MonthlyReportingExportHelper_SplitConfig.json");
-  listCSharpMethods("C:\\Users\\NithiDhanasekaran\\source\\repos\\146314\\Framsikt\\Framsikt.BL\\BudgetAllocBudgetChanges.cs")
+  ProcessSplitCSharpclass("BusinessPlanConfig.json");
+  // listCSharpMethods("C:\\Users\\NithiDhanasekaran\\source\\repos\\146314\\Framsikt\\Framsikt.BL\\Utility.cs")
 
   main().catch((error) => {
     console.error('Server error:', error);
