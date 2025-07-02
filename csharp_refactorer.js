@@ -227,7 +227,7 @@ class CSharpRefactorer {
         this.otherMembers = this.otherMembers.replace(matchingMethod, '');
       } else {
         await fs.writeFile("C:\\Tools\\MCP-Servers\\debug", JSON.stringify(this.methods));
-        // throw new Error(`Method '${signature}' not found in source code. Check method signature in the config, they must exactly match with source code (case-sensitive).`);
+        throw new Error(`Method '${signature}' not found in source code. Check method signature in the config, they must exactly match with source code (case-sensitive).`);
       }
     }
 
@@ -338,19 +338,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             "interface": "", // Optional. Only if interface exists
             "methods": [
                 {
-                    "accessor": "public",
-                    "returnType": "void",
+                    "accessor": "public",  // Don't include static and async keywords here
+                    "returnType": "void", // Don't include static and async keywords here
                     "static": true, // Optional, defaults to false. Must be Set to true if method is static
                     "async": true, // Optional, defaults to false. Must be Set to true if method is async
-                    "name": "MethodOne",
+                    "name": "MethodOne",  // Don't include static and async keywords here
                     "arguments": ["string arg1", "int arg2 = 1"]
                 },
                 {
-                    "accessor": "private",
+                    "accessor": "private",  // Don't include static and async keywords here
                     "static": true, // Optional, defaults to false. Must be Set to true if method is static
                     "async": true, // Optional, defaults to false. Must be Set to true if method is async                    
-                    "returnType": "Task<string>",
-                    "name": "MethodTwo"
+                    "returnType": "Task<string>", // Don't include static and async keywords here
+                    "name": "MethodTwo"  // Don't include static and async keywords here
                 }
             ]
         },
@@ -539,7 +539,7 @@ async function ProcessSplitCSharpclass(config_file) {
   }
 
   if(errors.length > 0) {
-    // throw new Error(`Following methods are not found in any partial class configuration. Ensure all methods are included in the 'partialClasses' array. "${config_file}":\n${errors.join('\n')}`);
+     throw new Error(`Following methods are not found in any partial class configuration. Ensure all methods are included in the 'partialClasses' array. "${config_file}":\n${errors.join('\n')}`);
   }
 
   // Create destination folder if it doesn't exist
@@ -558,7 +558,7 @@ async function ProcessSplitCSharpclass(config_file) {
     // Get no of lines in the content
     const lineCount = content.split('\n').length;
     if(lineCount > 5000) {
-      // throw new Error(`Generated partial file ${fileName} exceeds 5000 lines. Please split the methods into smaller groups in the configuration.`);
+      throw new Error(`Generated partial file ${fileName} exceeds 5000 lines. Please split the methods into smaller groups in the configuration.`);
     }
 
     // Write content to file
@@ -598,7 +598,7 @@ async function main() {
 // Run the server if this file is executed directly
 if (require.main === module) {
 
-  ProcessSplitCSharpclass("BusinessPlanConfig.json");
+  // ProcessSplitCSharpclass("BusinessPlanConfig.json");
   // listCSharpMethods("C:\\Users\\NithiDhanasekaran\\source\\repos\\146314\\Framsikt\\Framsikt.BL\\Utility.cs")
 
   main().catch((error) => {
