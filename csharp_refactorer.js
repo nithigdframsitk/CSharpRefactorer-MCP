@@ -227,7 +227,7 @@ class CSharpRefactorer {
         this.otherMembers = this.otherMembers.replace(matchingMethod, '');
       } else {
         await fs.writeFile("C:\\Tools\\MCP-Servers\\debug", JSON.stringify(this.methods));
-        throw new Error(`Method '${signature}' not found in source code. Check method signature in the config, they must exactly match with source code (case-sensitive).`);
+        throw new Error(`Method '${signature}' not found in source code. Check method signature in all the configs, they must exactly match with source code (case-sensitive). remove it from the config if it doesn't exist in the methods list.`);
       }
     }
 
@@ -307,11 +307,99 @@ class CSharpRefactorer {
   }
 }
 
+/**
+ * Merge multiple configuration files into a single configuration object
+ * @param {string[]} configFiles - Array of configuration file paths
+ * @returns {Object} Merged configuration object
+ */
+async function mergeConfigurations(configFiles) {
+  if (!Array.isArray(configFiles) || configFiles.length === 0) {
+    throw new Error('At least one configuration file must be provided');
+  }
+
+  let mergedConfig = null;
+  const allPartialClasses = [];
+
+  for (const configFile of configFiles) {
+    try {
+      const configContent = await fs.readFile(configFile, 'utf-8');
+      const config = JSON.parse(configContent);
+
+      if (mergedConfig === null) {
+        // First configuration file sets the base structure
+        mergedConfig = {
+          sourceFile: config.sourceFile,
+          destinationFolder: config.destinationFolder,
+          newNamespace: config.newNamespace,
+          mainPartialClassName: config.mainPartialClassName,
+          mainInterface: config.mainInterface || '',
+          partialClasses: []
+        };
+
+        // Validate required properties in the first config
+        const requiredKeys = ['sourceFile', 'destinationFolder', 'newNamespace', 'mainPartialClassName'];
+        for (const key of requiredKeys) {
+          if (!config[key]) {
+            throw new Error(`Configuration file "${configFile}" is missing required key: "${key}". Value should not be empty.`);
+          }
+        }
+      } else {
+        // Subsequent configuration files - validate consistency
+        if (config.sourceFile && config.sourceFile !== mergedConfig.sourceFile) {
+          throw new Error(`Source file mismatch in "${configFile}". Expected: "${mergedConfig.sourceFile}", Found: "${config.sourceFile}"`);
+        }
+        if (config.destinationFolder && config.destinationFolder !== mergedConfig.destinationFolder) {
+          throw new Error(`Destination folder mismatch in "${configFile}". Expected: "${mergedConfig.destinationFolder}", Found: "${config.destinationFolder}"`);
+        }
+        if (config.newNamespace && config.newNamespace !== mergedConfig.newNamespace) {
+          throw new Error(`Namespace mismatch in "${configFile}". Expected: "${mergedConfig.newNamespace}", Found: "${config.newNamespace}"`);
+        }
+        if (config.mainPartialClassName && config.mainPartialClassName !== mergedConfig.mainPartialClassName) {
+          throw new Error(`Main partial class name mismatch in "${configFile}". Expected: "${mergedConfig.mainPartialClassName}", Found: "${config.mainPartialClassName}"`);
+        }
+      }
+
+      // Add partial classes from this configuration
+      if (config.partialClasses && Array.isArray(config.partialClasses)) {
+        allPartialClasses.push(...config.partialClasses);
+      }
+
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        throw new Error(`Configuration file not found: ${configFile}`);
+      }
+      throw new Error(`Error processing configuration file "${configFile}": ${error.message}`);
+    }
+  }
+
+  // Check for duplicate file names
+  const fileNames = allPartialClasses.map(pc => pc.fileName);
+  const duplicateFileNames = fileNames.filter((name, index) => fileNames.indexOf(name) !== index);
+  if (duplicateFileNames.length > 0) {
+    throw new Error(`Duplicate partial class file names found: ${[...new Set(duplicateFileNames)].join(', ')}`);
+  }
+
+  // Check for duplicate method names across all partial classes
+  const allMethodNames = [];
+  for (const partialClass of allPartialClasses) {
+    if (partialClass.methods && Array.isArray(partialClass.methods)) {
+      for (const method of partialClass.methods) {
+        if (method.name) {
+          allMethodNames.push(method.name);
+        }
+      }
+    }
+  }
+
+  mergedConfig.partialClasses = allPartialClasses;
+  return mergedConfig;
+}
+
 // Create the MCP server
 const server = new Server(
   {
     name: 'csharp-refactorer',
-    version: '0.2.0',
+    version: '0.3.0',
   },
   {
     capabilities: {
@@ -326,7 +414,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'split_csharp_class',
-        description: `Split a C# class file into multiple partial class files based on a JSON configuration. Methods should be grouped by functionality or business logic. Example Configuration: {
+        description: `Split a C# class file into multiple partial class files based on JSON configuration(s). Methods should be grouped by functionality or business logic. 
+
+SINGLE CONFIG EXAMPLE:
+{
     "sourceFile": "C:\\Path\\To\\Your\\SourceClass.cs",
     "destinationFolder": "C:\\Path\\To\\Your\\Output\\{Main ClassName from the source file}",
     "newNamespace": "Your.New.Namespace", // Use Existing namespace in source file if user not specified
@@ -338,45 +429,55 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             "interface": "", // Optional. Only if interface exists
             "methods": [
                 {
-                    "accessor": "public",  // Don't include static and async keywords here
-                    "returnType": "void", // Don't include static and async keywords here
+                    "accessor": "public",
+                    "returnType": "void",
                     "static": true, // Optional, defaults to false. Must be Set to true if method is static
                     "async": true, // Optional, defaults to false. Must be Set to true if method is async
-                    "name": "MethodOne",  // Don't include static and async keywords here
+                    "name": "MethodOne",
                     "arguments": ["string arg1", "int arg2 = 1"]
-                },
-                {
-                    "accessor": "private",  // Don't include static and async keywords here
-                    "static": true, // Optional, defaults to false. Must be Set to true if method is static
-                    "async": true, // Optional, defaults to false. Must be Set to true if method is async                    
-                    "returnType": "Task<string>", // Don't include static and async keywords here
-                    "name": "MethodTwo"  // Don't include static and async keywords here
-                }
-            ]
-        },
-        {
-            "fileName": "YourClass.{Category}.cs",
-            "interface": "", // Optional. Only if interface exists
-            "methods": [
-                {
-                    "accessor": "public",
-                    "static": true, // Optional, defaults to false. Must be Set to true if method is static
-                    "async": true, // Optional, defaults to false. Must be Set to true if method is async    
-                    "returnType": "bool",
-                    "name": "MethodThree",
-                    "arguments": ["string someArg = 'value'"]
                 }
             ]
         }
     ]
 }
-`,
+
+MULTIPLE CONFIG EXAMPLE:
+For large classes, you can split the configuration into multiple files. Each file should contain the same base properties (sourceFile, destinationFolder, newNamespace, mainPartialClassName) and its own partialClasses array. The tool will merge all configurations automatically.
+
+Config1.json:
+{
+    "sourceFile": "C:\\Path\\To\\Your\\SourceClass.cs",
+    "destinationFolder": "C:\\Path\\To\\Your\\Output\\{Main ClassName}",
+    "newNamespace": "Your.New.Namespace",
+    "mainPartialClassName": "{Main ClassName}.Core.cs",
+    "mainInterface": "IMainInterface",
+    "partialClasses": [
+        {
+            "fileName": "YourClass.DatabaseOperations.cs",
+            "methods": [...]
+        }
+    ]
+}
+
+Config2.json:
+{
+    "sourceFile": "C:\\Path\\To\\Your\\SourceClass.cs",
+    "destinationFolder": "C:\\Path\\To\\Your\\Output\\{Main ClassName}",
+    "newNamespace": "Your.New.Namespace",
+    "mainPartialClassName": "{Main ClassName}.Core.cs",
+    "partialClasses": [
+        {
+            "fileName": "YourClass.BusinessLogic.cs",
+            "methods": [...]
+        }
+    ]
+}`,
         inputSchema: {
           type: 'object',
           properties: {
             config_file: {
               type: 'string',
-              description: 'Absolute full path to the JSON configuration file. Ex: C:\\Users\\user\\config.json',
+              description: 'Absolute full path to the JSON configuration file OR comma-separated list of multiple config file paths. Ex: C:\\Users\\user\\config.json OR C:\\Users\\user\\config1.json,C:\\Users\\user\\config2.json',
             },
           },
           required: ['config_file'],
@@ -412,7 +513,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error("Missing required argument: config_file");
       }
 
-      // Read and parse the configuration file
       return await ProcessSplitCSharpclass(config_file);
     } else if (name === 'list_csharp_methods') {
       return await listCSharpMethods(args.source_file);
@@ -484,11 +584,14 @@ async function listCSharpMethods(source_file) {
   };
 }
 
-async function ProcessSplitCSharpclass(config_file) {
-  const configContent = await fs.readFile(config_file, 'utf-8');
-  const config = JSON.parse(configContent);
+async function ProcessSplitCSharpclass(config_file_input) {
+  // Parse config file(s) - can be single file or comma-separated list
+  const configFiles = config_file_input.split(',').map(file => file.trim());
+  
+  // Merge all configuration files
+  const config = await mergeConfigurations(configFiles);
 
-  // Map properties from the config file (camelCase) to the script's variables (snake_case)
+  // Map properties from the merged config
   const source_file = config.sourceFile;
   const destination_folder = config.destinationFolder;
   const new_namespace = config.newNamespace;
@@ -496,21 +599,13 @@ async function ProcessSplitCSharpclass(config_file) {
   const partial_classes = config.partialClasses;
   const main_interface = config.mainInterface || '';
 
-  // Validate that all required properties were found in the config file
-  const requiredKeys = ['sourceFile', 'destinationFolder', 'newNamespace', 'mainPartialClassName', 'partialClasses'];
-  for (const key of requiredKeys) {
-    if (!config[key]) {
-      throw new Error(`Configuration file "${config_file}" is missing required key: "${key}". value should not be empty.`);
-    }
-  }
-
   // Create refactorer instance
   const refactorer = new CSharpRefactorer();
 
   // Parse source file
   await refactorer.parseSourceFile(source_file);
 
-  // if partial_classes dont have all the methods from the parsed source file, throw an error
+  // Validate that all methods from the source file are included in partial classes
   const allMethods = Object.keys(refactorer.methods);
   const methodsWithRawKey = Object.keys(refactorer.methodsWithRawKey);
   let i = 0;
@@ -522,9 +617,6 @@ async function ProcessSplitCSharpclass(config_file) {
     const methodSignature = allMethods[method];
     const foundInPartial = partial_classes.some(partialClass =>
       partialClass.methods.some(m => {
-        // const constructedSignature = `${m.accessor || 'public'} ${m.static ? 'static': ''} ${m.async ? 'async': ''} ${m.returnType || 'void'} ${m.name}(${m.arguments ? m.arguments.join(', ') : ''})`;
-        // const constructedSignature1 = `${m.accessor || 'public'} ${m.async ? 'async': ''} ${m.static ? 'static': ''} ${m.returnType || 'void'} ${m.name}(${m.arguments ? m.arguments.join(', ') : ''})`;
-
         var [constructedSignature, constructedSignature1] = refactorer.GetSignature(m);
 
         var includes = methodSignature.replace(/\s+/g, '').includes(constructedSignature.replace(/\s+/g, ''));
@@ -539,13 +631,16 @@ async function ProcessSplitCSharpclass(config_file) {
   }
 
   if(errors.length > 0) {
-     throw new Error(`Following methods are not found in any partial class configuration. Ensure all methods are included in the 'partialClasses' array. "${config_file}":\n${errors.join('\n')}`);
+     throw new Error(`Following methods are not found in any partial class configuration. Ensure all methods are included in the 'partialClasses' array across all config files:\n${errors.join('\n')}`);
   }
 
   // Create destination folder if it doesn't exist
   await fs.mkdir(destination_folder, { recursive: true });
 
   const results = [];
+  results.push(`Processed ${configFiles.length} configuration file(s):`);
+  configFiles.forEach(file => results.push(`  - ${file}`));
+  results.push('');
 
   // Generate partial class files
   for (const partialClass of partial_classes) {
@@ -564,7 +659,7 @@ async function ProcessSplitCSharpclass(config_file) {
     // Write content to file
     await fs.writeFile(filePath, content, 'utf-8');
 
-    results.push(`Generated: ${filePath}`);
+    results.push(`Generated: ${filePath} (${partialClass.methods.length} methods, ${lineCount} lines)`);
   }
 
   // Generate main partial class file
@@ -576,7 +671,7 @@ async function ProcessSplitCSharpclass(config_file) {
   );
 
   await fs.writeFile(mainFilePath, mainContent, 'utf-8');
-  results.push(`Generated: ${mainFilePath}`);
+  results.push(`Generated: ${mainFilePath} (main partial class)`);
 
   return {
     content: [
@@ -597,10 +692,6 @@ async function main() {
 
 // Run the server if this file is executed directly
 if (require.main === module) {
-
-  // ProcessSplitCSharpclass("BusinessPlanConfig.json");
-  // listCSharpMethods("C:\\Users\\NithiDhanasekaran\\source\\repos\\146314\\Framsikt\\Framsikt.BL\\Utility.cs")
-
   main().catch((error) => {
     console.error('Server error:', error);
     process.exit(1);
