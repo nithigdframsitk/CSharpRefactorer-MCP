@@ -37,7 +37,8 @@ class CSharpRefactorer {
 
     // Group 1: The full signature text.
     // Group 2: The method name.
-    const methodPattern = /^(?!#|$)\s*((?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|virtual|override|async))\s+[\w<,>\s]*\s+([\w<>]+)\s*(?<params>\((?:[^()]|(\?&params))*\))(?:[\s\n]*where\s+[^\{]*)?)(?=\s*\{)/gm;
+    const methodPattern1 = /^(?!#|$)\s*((?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|virtual|override|async))\s+[\w<,>\s]*\s+([\w<>]+)\s*(?<params>\((?:[^()]|(\?&params))*\))(?:[\s\n]*where\s+[^\{]*)?)(?=\s*\{)/gm;
+    const methodPattern = /^(?!#|$)\s*((?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|virtual|override|async))\s+[\w<,>\s.()\[\]]*\s+([\w<>]+)\s*(?<params>\((?:[^()]|(\?&params))*\))(?:[\s\n]*where\s+[^\{]*)?)(?=\s*\{)/gm;
 
     let match;
     let matchNum = 1;
@@ -193,6 +194,8 @@ class CSharpRefactorer {
 
     content += `    ${classDecl}\n    {\n`;
 
+    var errors = [];
+
     // Write methods
     for (const methodInfo of partialClassConfig.methods) {
       let [signature, signature1] = this.GetSignature(methodInfo);
@@ -226,9 +229,28 @@ class CSharpRefactorer {
         content += `${matchingMethod}\n\n`;
         this.otherMembers = this.otherMembers.replace(matchingMethod, '');
       } else {
-        await fs.writeFile("C:\\Tools\\MCP-Servers\\debug", JSON.stringify(this.methods));
-        throw new Error(`Method '${signature}' not found in source code. Check method signature in all the configs, they must exactly match with source code (case-sensitive). remove it from the config if it doesn't exist in the methods list.`);
+        await fs.writeFile("C:\\Tools\\MCP-Servers\\debug", JSON.stringify(this.methods, null, 2));
+        
+        // Find similar methods by name from the this.methods object
+        const methodName = methodInfo.name;
+        const similarMethods = this.findSimilarMethods(methodName);
+        
+        let errorMessage = `Method '${signature}' not found in source code.`;
+        if (similarMethods.length > 0) {
+          errorMessage += `\n   Similar methods found by name '${methodName}':\n`;
+          similarMethods.forEach((similar, index) => {
+            errorMessage += `   ${index + 1}. ${similar}\n`;
+          });
+          errorMessage += `   Please check the method signature configuration matches exactly with one of the above.`;
+        }
+        
+        errors.push(errorMessage);
       }
+    }
+
+    if(errors.length > 0) {
+      const errorMessage = `The following errors occured:\n\n${errors.map((error, index) => `${index + 1}. ${error}`).join('\n')}\n\nPlease check that:\n- Method signatures in config exactly match source code (case-sensitive)\n- All specified methods exist in the source file\n- Remove any non-existent methods from the configuration`;
+      throw new Error(errorMessage);
     }
 
     // Close class and namespace
@@ -242,6 +264,24 @@ class CSharpRefactorer {
     return content;
   }
 
+  /**
+   * Find similar methods by name from the parsed methods
+   * @param {string} methodName - The method name to search for
+   * @returns {string[]} Array of similar method signatures
+   */
+  findSimilarMethods(methodName) {
+    const similarMethods = [];
+    
+    // Search through methodsWithRawKey for methods with the same name
+    for (const [signature, methodBody] of Object.entries(this.methodsWithRawKey)) {
+      if (signature.includes(methodName)) {
+        similarMethods.push(signature.trim());
+      }
+    }
+    
+    return similarMethods;
+  }
+
   GetSignature(methodInfo) {
     let signature = `${methodInfo.accessor || 'public'} `;
     let signature1 = `${methodInfo.accessor || 'public'} `;
@@ -250,12 +290,20 @@ class CSharpRefactorer {
       signature += 'static ';
     }
 
+    if (methodInfo.virtual) {
+      signature += 'virtual ';
+    }
+
     if (methodInfo.async) {
       signature += 'async ';
     }
 
     if (methodInfo.async) {
       signature1 += 'async ';
+    }
+
+    if (methodInfo.virtual) {
+      signature1 += 'virtual ';
     }
 
     if (methodInfo.static) {
@@ -432,6 +480,7 @@ SINGLE CONFIG EXAMPLE:
                     "accessor": "public",
                     "returnType": "void",
                     "static": true, // Optional, defaults to false. Must be Set to true if method is static
+                    "virtual": true, // Optional, defaults to false. Must be Set to true if method is virtual
                     "async": true, // Optional, defaults to false. Must be Set to true if method is async
                     "name": "MethodOne",
                     "arguments": ["string arg1", "int arg2 = 1"]
@@ -692,6 +741,15 @@ async function main() {
 
 // Run the server if this file is executed directly
 if (require.main === module) {
+
+
+  var input  = {
+    "config_file": "c:\\Tools\\split 2\\Utility_UserAuthentication_Config.json,c:\\Tools\\split 2\\Utility_TenantApplicationSettings_Config.json,c:\\Tools\\split 2\\Utility_ServiceAreaManagement_Config.json,c:\\Tools\\split 2\\Utility_ExcelExportOperations_Config.json,c:\\Tools\\split 2\\Utility_InvestmentActionManagement_Config.json,c:\\Tools\\split 2\\Utility_OrganizationStructure_Config.json,c:\\Tools\\split 2\\Utility_DatabaseAzureOperations_Config.json,c:\\Tools\\split 2\\Utility_UserRolesPermissions_Config.json,c:\\Tools\\split 2\\Utility_RemainingUtilities_Config.json,c:\\Tools\\split 2\\Utility_BudgetParameterManagement_Config.json,c:\\Tools\\split 2\\Utility_ComprehensiveUtilities_Config.json,c:\\Tools\\split 2\\Utility_VirtualMethods_Config.json,c:\\Tools\\split 2\\Utility_DepartmentFunctionOperations_Config.json,c:\\Tools\\split 2\\Utility_ExcelStorageOperations_Config.json,c:\\Tools\\split 2\\Utility_OrgLevelsAlterCodes_Config.json,c:\\Tools\\split 2\\Utility_JobProgressTracking_Config.json,c:\\Tools\\split 2\\Utility_ApplicationFlagOperations_Config.json,c:\\Tools\\split 2\\Utility_ParameterChecking_Config.json,c:\\Tools\\split 2\\Utility_BudgetLockOperations_Config.json,c:\\Tools\\split 2\\Utility_ServiceUnitOperations_Config.json,c:\\Tools\\split 2\\Utility_TemplateAndDimensionOperations_Config.json,c:\\Tools\\split 2\\Utility_RemainingAsyncOperations_Config.json,c:\\Tools\\split 2\\Utility_DataTableUtilityOperations_Config.json,c:\\Tools\\split 2\\Utility_MassiveRemainingOperations_Config.json,c:\\Tools\\split 2\\Utility_AllRemainingMethods1_Config.json,c:\\Tools\\split 2\\Utility_AllRemainingMethods2_Config.json,c:\\Tools\\split 2\\Utility_VirtualAndCoreOperations_Config.json,c:\\Tools\\split 2\\Utility_PeriodicKeysAndBudgetOperations_Config.json,c:\\Tools\\split 2\\Utility_TextEditorAndBlobOperations_Config.json,c:\\Tools\\split 2\\Utility_ParameterAndServiceOperations_Config.json,c:\\Tools\\split 2\\Utility_ColumnConfigAndStorageOperations_Config.json,c:\\Tools\\split 2\\Utility_PublishAndURLOperations_Config.json,c:\\Tools\\split 2\\Utility_WidgetAndUIOperations_Config.json,c:\\Tools\\split 2\\Utility_FinalRemainingMethods1_Config.json,c:\\Tools\\split 2\\Utility_FinalRemainingMethods2_Config.json,c:\\Tools\\split 2\\Utility_OrgStructureAndDepartmentOperations_Config.json,c:\\Tools\\split 2\\Utility_OrgVersionManagement_Config.json,c:\\Tools\\split 2\\Utility_OrganizationServiceManagement_Config.json,c:\\Tools\\split 2\\Utility_InvestmentActionOperations_Config.json,c:\\Tools\\split 2\\Utility_PublishingReportManagement_Config.json,c:\\Tools\\split 2\\Utility_TextEditorDescriptionManagement_Config.json,c:\\Tools\\split 2\\Utility_AzureStorageOperations_Config.json,c:\\Tools\\split 2\\Utility_AuthenticationUserManagement_Config.json,c:\\Tools\\split 2\\Utility_UtilityHelperMethods_Config.json,c:\\Tools\\split 2\\Utility_DepartmentHierarchyManagement_Config.json,c:\\Tools\\split 2\\Utility_OrganizationStructureOperations_Config.json"
+  };
+
+  // ProcessSplitCSharpclass(input.config_file);
+  // listCSharpMethods(`C:\\Users\\NithiDhanasekaran\\source\\repos\\Framsikt Product Development\\Framsikt\\Framsikt.BL\\Utility.cs`)
+
   main().catch((error) => {
     console.error('Server error:', error);
     process.exit(1);
