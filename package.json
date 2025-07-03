@@ -1,5 +1,31 @@
 {
+  "name": "csharp-refactorer-mcp-servers",
+  "version": "1.0.0",
+  "description": "MCP Servers for C# class refactoring - both full signature and simplified versions",
+  "main": "csharp_refactorer.js",
+  "scripts": {
+    "start": "node csharp_refactorer.js",
+    "start-simple": "node csharp_refactorer_simple.js",
+    "test": "node run_tests.js",
+    "test-integration": "node integration_tests.js",
+    "test-e2e": "node e2e_test.js",
+    "test-all": "node test_all.js"
+  },
+  "bin": {
+    "csharp-refactorer": "./csharp_refactorer.js",
+    "csharp-refactorer-simple": "./csharp_refactorer_simple.js"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.3"
-  }
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "csharp",
+    "refactoring",
+    "partial-classes",
+    "code-splitting"
+  ]
 }

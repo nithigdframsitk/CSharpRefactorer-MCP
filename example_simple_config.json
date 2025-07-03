@@ -1,0 +1,39 @@
+{
+    "sourceFile": "C:\\Path\\To\\Your\\SourceClass.cs",
+    "destinationFolder": "C:\\Path\\To\\Your\\Output\\YourClassName",
+    "newNamespace": "Your.New.Namespace",
+    "mainPartialClassName": "YourClassName.Core.cs",
+    "mainInterface": "",
+    "partialClasses": [
+        {
+            "fileName": "YourClassName.DatabaseOperations.cs",
+            "interface": "",
+            "methods": [
+                "GetUser",
+                "SaveUser",
+                "DeleteUser",
+                "UpdateUser"
+            ]
+        },
+        {
+            "fileName": "YourClassName.BusinessLogic.cs",
+            "interface": "",
+            "methods": [
+                "ProcessData",
+                "ValidateInput",
+                "CalculateResults",
+                "GenerateReport"
+            ]
+        },
+        {
+            "fileName": "YourClassName.UtilityMethods.cs",
+            "interface": "",
+            "methods": [
+                "FormatString",
+                "ConvertData",
+                "LogError",
+                "SendNotification"
+            ]
+        }
+    ]
+}

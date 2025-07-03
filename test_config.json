@@ -1,0 +1,38 @@
+{
+    "sourceFile": "c:\\Tools\\MCP-Servers\\test_sample.cs",
+    "destinationFolder": "c:\\Tools\\MCP-Servers\\test_output",
+    "newNamespace": "TestNamespace.Refactored",
+    "mainPartialClassName": "TestUtility.Core.cs",
+    "mainInterface": "",
+    "partialClasses": [
+        {
+            "fileName": "TestUtility.UserManagement.cs",
+            "interface": "",
+            "methods": [
+                "GetUserAsync",
+                "GetUser",
+                "SaveUserAsync",
+                "DeleteUser"
+            ]
+        },
+        {
+            "fileName": "TestUtility.DataProcessing.cs",
+            "interface": "",
+            "methods": [
+                "ProcessDataAsync",
+                "ValidateInput",
+                "CalculateResults",
+                "GenerateReportAsync"
+            ]
+        },
+        {
+            "fileName": "TestUtility.Utilities.cs",
+            "interface": "",
+            "methods": [
+                "FormatString",
+                "ConvertData",
+                "SendNotification"
+            ]
+        }
+    ]
+}
