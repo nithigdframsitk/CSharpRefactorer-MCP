@@ -11,7 +11,7 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "program": "${workspaceFolder}\\csharp_refactorer_simple.js"
+            "program": "${workspaceFolder}\\csharp_refactorer.js"
         }
     ]
 }
