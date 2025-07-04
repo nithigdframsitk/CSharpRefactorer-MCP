@@ -2,8 +2,8 @@
 
 This repository contains two MCP (Model Context Protocol) servers for C# class refactoring:
 
-1. **csharp_refactorer.js** - Original server with full method signature configuration
-2. **csharp_refactorer_simple.js** - New simplified server with method name-only configuration
+1. **csharp_refactorer_original.js** - Original server with full method signature configuration
+2. **csharp_refactorer.js** - New simplified server with method name-only configuration
 
 ## Features
 
