@@ -14,6 +14,12 @@ This repository contains two MCP (Model Context Protocol) servers for C# class r
 - Validation and error handling
 - Namespace and interface management
 
+## Future Plans for Updates on this MCP Tool
+
+- Planning to add tools that could create a dependency tree useful for indexing the application for an AI Agent to refer to.
+- Concept: Every task/story will start from the parent method (it can be a Controller method). When the Agent starts the task, it will begin by finding all the places where the code needs to be updated with the help of the dependency tree. This is very helpful for very large projects.
+- Tool to get the method body by method name and class name.
+
 ## Installation
 
 ```bash
