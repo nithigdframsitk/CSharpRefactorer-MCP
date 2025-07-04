@@ -876,7 +876,7 @@ NOTES:
         },
         {
           name: 'list_csharp_methods',
-          description: 'List all method names found in a C# class file with line counts. This tool is useful for creating simplified configuration files and estimating partial class sizes.',
+          description: 'List all method signatures found in a C# class file with line counts. This tool shows the complete method signatures including parameters, return types, and access modifiers. Useful for creating simplified configuration files and estimating partial class sizes.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -1058,24 +1058,31 @@ async function listCSharpMethodsSimple(source_file, target_class_name = null) {
   }
 
   const methodsInfo = [];
-  methodsInfo.push(`Method names found in ${source_file}${target_class_name ? ` for class "${target_class_name}"` : ''}:`);
+  methodsInfo.push(`Method signatures found in ${source_file}${target_class_name ? ` for class "${target_class_name}"` : ''}:`);
   methodsInfo.push('='.repeat(50));
   methodsInfo.push('');
 
   let totalLines = 0;
 
-  // Group methods by name and show overloads with line counts
+  // Group methods by name and show overloads with full signatures and line counts
   methodNames.forEach((methodName, index) => {
     const methodOverloads = refactorer.methodsByName[methodName];
-    const methodLines = methodOverloads[0].lineCount; // Use first overload for line count
-    totalLines += methodLines;
+    let methodTotalLines = 0;
 
-    methodsInfo.push(`${index + 1}. ${methodName} (${methodLines} lines)`);
+    methodsInfo.push(`${index + 1}. ${methodName}:`);
 
-    if (methodOverloads.length > 1) {
-      methodsInfo.push(`   (${methodOverloads.length} overloads)`);
-    }
+    // Show each overload with its full signature
+    methodOverloads.forEach((method, overloadIndex) => {
+      methodTotalLines += method.lineCount;
+      const overloadLabel = methodOverloads.length > 1 ? ` [Overload ${overloadIndex + 1}]` : '';
+      methodsInfo.push(`   ${method.signature}${overloadLabel}`);
+      methodsInfo.push(`   (${method.lineCount} lines)`);
+      if (overloadIndex < methodOverloads.length - 1) {
+        methodsInfo.push('');
+      }
+    });
 
+    totalLines += methodTotalLines;
     methodsInfo.push('');
   });
 
