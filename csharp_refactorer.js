@@ -261,24 +261,16 @@ class CSharpRefactorer {
 
     content += `    ${classDecl}\n    {\n`;
 
-    var errors = [];
     var processedMethods = [];
     var totalLines = 0;
 
-    // Write methods
+    // Write methods (all methods are guaranteed to exist due to pre-validation)
     for (const methodName of partialClassConfig.methods) {
       const methodInfoList = this.findMethodByName(methodName);
 
+      // If method is already processed, skip it silently (this is allowed)
       if (!methodInfoList) {
-        // Check if method exists but is already processed
-        const allMethodsForName = this.methodsByName[methodName];
-        if (allMethodsForName && allMethodsForName.length > 0) {
-          // Method exists but already processed - skip silently
-          continue;
-        } else {
-          // Method doesn't exist at all
-          errors.push(`Method '${methodName}' not found in source code.`);
-        }
+        continue;
       }
 
       for (let key in methodInfoList) {
@@ -297,12 +289,6 @@ class CSharpRefactorer {
 
         processedMethods.push({ name: methodName, lines: methodInfo.lineCount });
       }
-
-    }
-
-    if (errors.length > 0) {
-      const errorMessage = `The following errors occurred:\n\n${errors.map((error, index) => `${index + 1}. ${error}`).join('\n')}\n\nAvailable methods:\n${Object.keys(this.methodsByName).join(', ')}`;
-      throw new Error(errorMessage);
     }
 
     // Close class and namespace
@@ -490,6 +476,210 @@ class CSharpRefactorer {
     }
 
     return classes;
+  }
+
+  /**
+   * Parse method calls within a method body
+   * @param {string} methodContent - The method content to analyze
+   * @returns {Array} Array of method call objects with class and method names
+   */
+  parseMethodCalls(methodContent) {
+    const methodCalls = [];
+    
+    // Extract only the method body (content between the first '{' and last '}')
+    const firstBraceIndex = methodContent.indexOf('{');
+    const lastBraceIndex = methodContent.lastIndexOf('}');
+    
+    if (firstBraceIndex === -1 || lastBraceIndex === -1 || firstBraceIndex >= lastBraceIndex) {
+      return methodCalls; // No valid method body found
+    }
+    
+    const methodBody = methodContent.substring(firstBraceIndex + 1, lastBraceIndex);
+    
+    // Pattern to match method calls like:
+    // - this.MethodName()
+    // - ClassName.MethodName()
+    // - instance.MethodName()
+    // - await MethodName()
+    // - MethodName()
+    const methodCallPattern = /(?:(?:this|await)\s*\.)?\s*(?:(\w+)\s*\.)?\s*(\w+)\s*\(/g;
+    
+    let match;
+    while ((match = methodCallPattern.exec(methodBody)) !== null) {
+      const className = match[1] || 'this'; // Default to 'this' if no class specified
+      const methodName = match[2];
+      
+      // Filter out common keywords and built-in methods
+      const excludeKeywords = [
+        'if', 'while', 'for', 'foreach', 'switch', 'using', 'lock', 'try', 'catch', 'finally',
+        'new', 'return', 'throw', 'yield', 'var', 'int', 'string', 'bool', 'double', 'float',
+        'DateTime', 'TimeSpan', 'Guid', 'List', 'Dictionary', 'Array', 'Task', 'async', 'await',
+        'Console', 'Debug', 'Trace', 'Math', 'Convert', 'Parse', 'ToString', 'GetType',
+        'Equals', 'GetHashCode', 'CompareTo', 'Clone', 'Dispose'
+      ];
+      
+      if (!excludeKeywords.includes(methodName) && methodName.length > 1) {
+        methodCalls.push({
+          className: className,
+          methodName: methodName,
+          fullCall: match[0]
+        });
+      }
+    }
+    
+    return methodCalls;
+  }
+
+  /**
+   * Build a dependency tree starting from a specific method
+   * @param {string} startClassName - The starting class name
+   * @param {string} startMethodName - The starting method name
+   * @param {number} maxDepth - Maximum depth to traverse (default: 3)
+   * @returns {Object} Dependency tree object
+   */
+  buildDependencyTree(startClassName, startMethodName, maxDepth = 3) {
+    const callStack = new Set(); // Track current call stack for circular detection
+    const dependencyTree = {
+      root: {
+        className: startClassName,
+        methodName: startMethodName,
+        dependencies: []
+      }
+    };
+    
+    const buildNode = (className, methodName, currentDepth) => {
+      if (currentDepth >= maxDepth) return null;
+      
+      const nodeKey = `${className}.${methodName}`;
+      
+      // Check if this method is already in our current call stack (circular dependency)
+      if (callStack.has(nodeKey)) {
+        return { className, methodName, circular: true, dependencies: [] };
+      }
+      
+      // Add to call stack before processing dependencies
+      callStack.add(nodeKey);
+      
+      // Find the method in our parsed methods
+      let methodInfo = null;
+      if (className === 'this' || className === startClassName) {
+        methodInfo = this.methodsByName[methodName]?.[0];
+      }
+      
+      const node = {
+        className,
+        methodName,
+        dependencies: [],
+        found: !!methodInfo,
+        lineCount: methodInfo?.lineCount || 0
+      };
+      
+      if (methodInfo) {
+        const methodCalls = this.parseMethodCalls(methodInfo.content);
+        
+        for (const call of methodCalls) {
+          const childNode = buildNode(call.className, call.methodName, currentDepth + 1);
+          if (childNode) {
+            node.dependencies.push(childNode);
+          }
+        }
+      }
+      
+      // Remove from call stack after processing all dependencies
+      callStack.delete(nodeKey);
+      
+      return node;
+    };
+    
+    dependencyTree.root = buildNode(startClassName, startMethodName, 0);
+    return dependencyTree;
+  }
+
+  /**
+   * Get method body by class name and method name
+   * @param {string} className - The class name (use 'this' for current class)
+   * @param {string} methodName - The method name
+   * @returns {Object|null} Method information object or null if not found
+   */
+  getMethodBody(className, methodName) {
+    // For current class or 'this', search in parsed methods
+    if (className === 'this' || !className || this.availableClasses.some(cls => cls.name === className)) {
+      const methods = this.methodsByName[methodName];
+      if (methods && methods.length > 0) {
+        return {
+          className: className || 'this',
+          methodName: methodName,
+          methods: methods.map(method => ({
+            signature: method.signature,
+            content: method.content,
+            lineCount: method.lineCount,
+            signatureKey: method.signatureKey
+          }))
+        };
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Find all methods that call a specific method (reverse dependency)
+   * @param {string} targetMethodName - The method name to find callers for
+   * @returns {Array} Array of methods that call the target method
+   */
+  findMethodCallers(targetMethodName) {
+    const callers = [];
+    
+    for (const [methodName, methodList] of Object.entries(this.methodsByName)) {
+      for (const method of methodList) {
+        const calls = this.parseMethodCalls(method.content);
+        const callsTarget = calls.some(call => call.methodName === targetMethodName);
+        
+        if (callsTarget) {
+          callers.push({
+            className: 'this',
+            methodName: methodName,
+            signature: method.signature,
+            lineCount: method.lineCount,
+            calls: calls.filter(call => call.methodName === targetMethodName)
+          });
+        }
+      }
+    }
+    
+    return callers;
+  }
+
+  /**
+   * Get method statistics and complexity metrics
+   * @param {string} methodName - The method name to analyze
+   * @returns {Object|null} Method statistics or null if not found
+   */
+  getMethodStatistics(methodName) {
+    const methods = this.methodsByName[methodName];
+    if (!methods || methods.length === 0) {
+      return null;
+    }
+    
+    const stats = {
+      methodName: methodName,
+      overloadCount: methods.length,
+      totalLines: 0,
+      averageLines: 0,
+      methodCalls: [],
+      dependencies: []
+    };
+    
+    for (const method of methods) {
+      stats.totalLines += method.lineCount;
+      const calls = this.parseMethodCalls(method.content);
+      stats.methodCalls.push(...calls);
+    }
+    
+    stats.averageLines = Math.round(stats.totalLines / methods.length);
+    stats.dependencies = [...new Set(stats.methodCalls.map(call => call.methodName))];
+    
+    return stats;
   }
 }
 
@@ -702,6 +892,99 @@ NOTES:
             required: ['source_file'],
           },
         },
+        {
+          name: 'build_dependency_tree',
+          description: 'Build a dependency tree starting from a specific method. This shows all methods called by the starting method and their sub-dependencies, useful for understanding code flow and impact analysis.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              source_file: {
+                type: 'string',
+                description: 'Absolute full path to the C# source file to analyze. Ex: C:\\Users\\user\\source\\MyProject\\MyClass.cs',
+              },
+              target_class_name: {
+                type: 'string',
+                description: 'Optional: specific class name to analyze if the file contains multiple classes. If not specified, the first class found will be used.',
+              },
+              start_method_name: {
+                type: 'string',
+                description: 'The method name to start building the dependency tree from (e.g., controller action method).',
+              },
+              max_depth: {
+                type: 'number',
+                description: 'Maximum depth to traverse in the dependency tree. Default is 3. Higher values may take longer but provide more complete analysis.',
+                default: 3
+              },
+            },
+            required: ['source_file', 'start_method_name'],
+          },
+        },
+        {
+          name: 'get_method_body',
+          description: 'Get the complete method body/content by class name and method name. Useful for detailed code analysis and understanding method implementation.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              source_file: {
+                type: 'string',
+                description: 'Absolute full path to the C# source file to analyze. Ex: C:\\Users\\user\\source\\MyProject\\MyClass.cs',
+              },
+              target_class_name: {
+                type: 'string',
+                description: 'Optional: specific class name to analyze if the file contains multiple classes. If not specified, the first class found will be used.',
+              },
+              method_name: {
+                type: 'string',
+                description: 'The method name to retrieve the body for.',
+              },
+            },
+            required: ['source_file', 'method_name'],
+          },
+        },
+        {
+          name: 'find_method_callers',
+          description: 'Find all methods that call a specific target method (reverse dependency analysis). Useful for impact analysis when modifying a method.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              source_file: {
+                type: 'string',
+                description: 'Absolute full path to the C# source file to analyze. Ex: C:\\Users\\user\\source\\MyProject\\MyClass.cs',
+              },
+              target_class_name: {
+                type: 'string',
+                description: 'Optional: specific class name to analyze if the file contains multiple classes. If not specified, the first class found will be used.',
+              },
+              target_method_name: {
+                type: 'string',
+                description: 'The method name to find callers for.',
+              },
+            },
+            required: ['source_file', 'target_method_name'],
+          },
+        },
+        {
+          name: 'get_method_statistics',
+          description: 'Get detailed statistics and complexity metrics for a specific method including line counts, dependencies, and method calls.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              source_file: {
+                type: 'string',
+                description: 'Absolute full path to the C# source file to analyze. Ex: C:\\Users\\user\\source\\MyProject\\MyClass.cs',
+              },
+              target_class_name: {
+                type: 'string',
+                description: 'Optional: specific class name to analyze if the file contains multiple classes. If not specified, the first class found will be used.',
+              },
+              method_name: {
+                type: 'string',
+                description: 'The method name to get statistics for.',
+              },
+            },
+            required: ['source_file', 'method_name'],
+          },
+        },
       ],
   };
 });
@@ -723,6 +1006,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return await listCSharpClasses(args.source_file);
     } else if (name === 'list_csharp_methods') {
       return await listCSharpMethodsSimple(args.source_file, args.target_class_name);
+    } else if (name === 'build_dependency_tree') {
+      return await buildDependencyTree(args.source_file, args.target_class_name, args.start_method_name, args.max_depth);
+    } else if (name === 'get_method_body') {
+      return await getMethodBody(args.source_file, args.target_class_name, args.method_name);
+    } else if (name === 'find_method_callers') {
+      return await findMethodCallers(args.source_file, args.target_class_name, args.target_method_name);
+    } else if (name === 'get_method_statistics') {
+      return await getMethodStatistics(args.source_file, args.target_class_name, args.method_name);
     } else {
       return {
         content: [
@@ -896,6 +1187,36 @@ async function ProcessSplitCSharpclassSimple(config_file_input) {
     results.push('');
   }
 
+  // Validate all methods in all partial classes before generating any files
+  const allErrors = [];
+  const allRequestedMethods = [];
+  
+  for (const partialClass of partial_classes) {
+    for (const methodName of partialClass.methods) {
+      allRequestedMethods.push({ methodName, fileName: partialClass.fileName });
+      
+      // Check if method exists
+      if (!refactorer.methodsByName[methodName]) {
+        allErrors.push(`Method '${methodName}' not found in source code (requested in ${partialClass.fileName})`);
+      }
+    }
+  }
+  
+  // Check if all methods from source code are included in the configuration
+  const availableMethodNames = Object.keys(refactorer.methodsByName);
+  const requestedMethodNames = allRequestedMethods.map(m => m.methodName);
+  const missingFromConfig = availableMethodNames.filter(methodName => !requestedMethodNames.includes(methodName));
+  
+  if (missingFromConfig.length > 0) {
+    allErrors.push(`Configuration is incomplete. The following methods from source code are not included in any partial class:\n${missingFromConfig.map(method => `  - ${method}`).join('\n')}\n\nAll methods must be assigned to a partial class configuration.`);
+  }
+  
+  // If there are any validation errors, throw an error and don't generate any files
+  if (allErrors.length > 0) {
+    const errorMessage = `Cannot generate partial classes due to validation errors:\n\n${allErrors.map((error, index) => `${index + 1}. ${error}`).join('\n')}\n\nAvailable methods in source code:\n${availableMethodNames.join(', ')}`;
+    throw new Error(errorMessage);
+  }
+
   // Generate partial class files
   for (const partialClass of partial_classes) {
     const fileName = partialClass.fileName;
@@ -970,3 +1291,243 @@ if (require.main === module) {
 }
 
 module.exports = { CSharpRefactorer, server, listCSharpMethodsSimple, ProcessSplitCSharpclassSimple };
+
+async function buildDependencyTree(source_file, target_class_name = null, start_method_name, max_depth = 3) {
+  // Create refactorer instance
+  const refactorer = new CSharpRefactorer();
+
+  // Parse source file with optional target class name
+  await refactorer.parseSourceFile(source_file, target_class_name);
+
+  // Check if the starting method exists
+  if (!refactorer.methodsByName[start_method_name]) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Method '${start_method_name}' not found in ${source_file}${target_class_name ? ` for class "${target_class_name}"` : ''}.\n\nAvailable methods:\n${Object.keys(refactorer.methodsByName).join(', ')}`,
+        },
+      ],
+    };
+  }
+
+  // Build dependency tree
+  const startClassName = target_class_name || refactorer.availableClasses[0]?.name || 'this';
+  const dependencyTree = refactorer.buildDependencyTree(startClassName, start_method_name, max_depth);
+
+  // Format the tree for display
+  const formatTree = (node, depth = 0, prefix = '') => {
+    const indent = '  '.repeat(depth);
+    const status = node.circular ? ' (circular)' : node.found ? '' : ' (not found)';
+    const lines = node.lineCount > 0 ? ` [${node.lineCount} lines]` : '';
+    
+    let result = `${indent}${prefix}${node.methodName}${lines}${status}\n`;
+    
+    if (node.dependencies && node.dependencies.length > 0 && !node.circular) {
+      node.dependencies.forEach((dep, index) => {
+        const isLast = index === node.dependencies.length - 1;
+        const depPrefix = isLast ? '└── ' : '├── ';
+        result += formatTree(dep, depth + 1, depPrefix);
+      });
+    }
+    
+    return result;
+  };
+
+  const treeDisplay = formatTree(dependencyTree.root);
+  
+  // Count total methods and found methods
+  const countMethods = (node, counts = { total: 0, found: 0, circular: 0 }) => {
+    counts.total++;
+    if (node.found) counts.found++;
+    if (node.circular) counts.circular++;
+    
+    if (node.dependencies) {
+      node.dependencies.forEach(dep => countMethods(dep, counts));
+    }
+    
+    return counts;
+  };
+  
+  const stats = countMethods(dependencyTree.root);
+
+  const result = [];
+  result.push(`Dependency Tree for ${start_method_name} in ${source_file}${target_class_name ? ` (class: ${target_class_name})` : ''}:`);
+  result.push('='.repeat(80));
+  result.push('');
+  result.push(treeDisplay);
+  result.push(`Statistics:`);
+  result.push(`- Total methods in tree: ${stats.total}`);
+  result.push(`- Methods found in source: ${stats.found}`);
+  result.push(`- Circular references: ${stats.circular}`);
+  result.push(`- Max depth analyzed: ${max_depth}`);
+  
+  return {
+    content: [
+      {
+        type: 'text',
+        text: result.join('\n'),
+      },
+    ],
+  };
+}
+
+async function getMethodBody(source_file, target_class_name = null, method_name) {
+  // Create refactorer instance
+  const refactorer = new CSharpRefactorer();
+
+  // Parse source file with optional target class name
+  await refactorer.parseSourceFile(source_file, target_class_name);
+
+  // Get method body
+  const methodInfo = refactorer.getMethodBody(target_class_name || 'this', method_name);
+
+  if (!methodInfo) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Method '${method_name}' not found in ${source_file}${target_class_name ? ` for class "${target_class_name}"` : ''}.\n\nAvailable methods:\n${Object.keys(refactorer.methodsByName).join(', ')}`,
+        },
+      ],
+    };
+  }
+
+  const result = [];
+  result.push(`Method Body for '${method_name}' in ${source_file}${target_class_name ? ` (class: ${target_class_name})` : ''}:`);
+  result.push('='.repeat(80));
+  result.push('');
+
+  methodInfo.methods.forEach((method, index) => {
+    if (methodInfo.methods.length > 1) {
+      result.push(`Overload ${index + 1}:`);
+      result.push('-'.repeat(40));
+    }
+    result.push(`Signature: ${method.signature}`);
+    result.push(`Line Count: ${method.lineCount}`);
+    result.push('');
+    result.push('Method Content:');
+    result.push('```csharp');
+    result.push(method.content);
+    result.push('```');
+    result.push('');
+  });
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: result.join('\n'),
+      },
+    ],
+  };
+}
+
+async function findMethodCallers(source_file, target_class_name = null, target_method_name) {
+  // Create refactorer instance
+  const refactorer = new CSharpRefactorer();
+
+  // Parse source file with optional target class name
+  await refactorer.parseSourceFile(source_file, target_class_name);
+
+  // Find callers
+  const callers = refactorer.findMethodCallers(target_method_name);
+
+  if (callers.length === 0) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `No methods found that call '${target_method_name}' in ${source_file}${target_class_name ? ` for class "${target_class_name}"` : ''}.`,
+        },
+      ],
+    };
+  }
+
+  const result = [];
+  result.push(`Methods calling '${target_method_name}' in ${source_file}${target_class_name ? ` (class: ${target_class_name})` : ''}:`);
+  result.push('='.repeat(80));
+  result.push('');
+
+  callers.forEach((caller, index) => {
+    result.push(`${index + 1}. ${caller.methodName} (${caller.lineCount} lines)`);
+    result.push(`   Signature: ${caller.signature}`);
+    result.push(`   Calls to ${target_method_name}: ${caller.calls.length}`);
+    caller.calls.forEach(call => {
+      result.push(`     - ${call.fullCall}`);
+    });
+    result.push('');
+  });
+
+  result.push(`Total methods calling '${target_method_name}': ${callers.length}`);
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: result.join('\n'),
+      },
+    ],
+  };
+}
+
+async function getMethodStatistics(source_file, target_class_name = null, method_name) {
+  // Create refactorer instance
+  const refactorer = new CSharpRefactorer();
+
+  // Parse source file with optional target class name
+  await refactorer.parseSourceFile(source_file, target_class_name);
+
+  // Get method statistics
+  const stats = refactorer.getMethodStatistics(method_name);
+
+  if (!stats) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Method '${method_name}' not found in ${source_file}${target_class_name ? ` for class "${target_class_name}"` : ''}.\n\nAvailable methods:\n${Object.keys(refactorer.methodsByName).join(', ')}`,
+        },
+      ],
+    };
+  }
+
+  const result = [];
+  result.push(`Statistics for method '${method_name}' in ${source_file}${target_class_name ? ` (class: ${target_class_name})` : ''}:`);
+  result.push('='.repeat(80));
+  result.push('');
+  
+  result.push(`Method Name: ${stats.methodName}`);
+  result.push(`Overload Count: ${stats.overloadCount}`);
+  result.push(`Total Lines: ${stats.totalLines}`);
+  result.push(`Average Lines per Overload: ${stats.averageLines}`);
+  result.push('');
+  
+  result.push(`Dependencies (${stats.dependencies.length} unique methods):`);
+  stats.dependencies.forEach((dep, index) => {
+    result.push(`  ${index + 1}. ${dep}`);
+  });
+  result.push('');
+  
+  result.push(`All Method Calls (${stats.methodCalls.length} total):`);
+  const callCounts = {};
+  stats.methodCalls.forEach(call => {
+    const key = `${call.className}.${call.methodName}`;
+    callCounts[key] = (callCounts[key] || 0) + 1;
+  });
+  
+  Object.entries(callCounts)
+    .sort(([,a], [,b]) => b - a)
+    .forEach(([method, count], index) => {
+      result.push(`  ${index + 1}. ${method} (${count} calls)`);
+    });
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: result.join('\n'),
+      },
+    ],
+  };
+}
