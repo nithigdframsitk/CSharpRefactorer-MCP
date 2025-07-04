@@ -20,6 +20,86 @@ This repository contains two MCP (Model Context Protocol) servers for C# class r
 npm install
 ```
 
+## Setup AI Agent Configuration for MCP Server
+
+To integrate this C# Refactorer MCP Server with your AI Agent, add the following MCP Server definition to your AI Agent's configuration file. This allows the AI agent to access all the advanced code analysis and refactoring capabilities.
+
+### Configuration Example
+
+```json
+{
+  "mcpServers": {
+    "csharp_refactorer": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "C:\\Path\\To\\Your\\MCP-Servers\\csharp_refactorer.js"
+      ]
+    }
+  }
+}
+```
+
+### Configuration Details
+
+- **Server Name**: `csharp_refactorer` - This is the identifier your AI agent will use to reference this server
+- **Type**: `stdio` - Uses standard input/output for communication with the MCP server
+- **Command**: `node` - Runs the server using Node.js
+- **Args**: Array containing the absolute path to the `csharp_refactorer.js` file
+
+### Important Notes
+
+1. **Use Absolute Paths**: Replace `"C:\\Path\\To\\Your\\MCP-Servers\\csharp_refactorer.js"` with the actual absolute path to your MCP server script
+2. **Path Format**: Use double backslashes (`\\`) in JSON for Windows paths, or forward slashes (`/`) for cross-platform compatibility
+3. **Node.js Required**: Ensure Node.js is installed and accessible in your system PATH
+4. **Restart Required**: After adding this configuration, restart your AI agent to load the new MCP server
+
+### Example for Different AI Agents
+
+#### Claude Desktop Configuration
+Add to your Claude Desktop configuration file (typically located in your user profile):
+```json
+{
+  "mcpServers": {
+    "csharp_refactorer": {
+      "type": "stdio", 
+      "command": "node",
+      "args": ["C:\\Tools\\MCP-Servers\\csharp_refactorer.js"]
+    }
+  }
+}
+```
+
+#### Custom AI Agent Integration
+For custom AI agents using the MCP SDK:
+```javascript
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+
+const transport = new StdioClientTransport({
+  command: 'node',
+  args: ['C:\\Tools\\MCP-Servers\\csharp_refactorer.js']
+});
+
+const client = new Client({
+  name: "my-ai-agent",
+  version: "1.0.0"
+}, {
+  capabilities: {}
+});
+
+await client.connect(transport);
+```
+
+Once configured, your AI agent will have access to the following tools:
+- `build_dependency_tree` - Analyze method dependencies and call hierarchies
+- `get_method_body` - Retrieve complete method implementations
+- `find_method_callers` - Find all methods that call a specific method
+- `get_method_statistics` - Get comprehensive method complexity metrics
+- `list_csharp_classes` - List all classes in a C# file
+- `list_csharp_methods` - List all methods with line counts
+- `split_csharp_class` - Split large classes into logical partial classes
+
 ## Usage
 
 ### Original Server (Full Signatures)
