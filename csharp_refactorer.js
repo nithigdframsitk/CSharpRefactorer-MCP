@@ -22,7 +22,6 @@ class CSharpRefactorer {
     this.classDeclaration = '';
     this.methods = {};
     this.methodsByName = {};
-    this.otherMembers = '';
     this.sourceCode = '';
     this.oldNamespace = '';
     this.processedMethods = new Set();
@@ -41,7 +40,7 @@ class CSharpRefactorer {
 
     // Group 1: The full signature text.
     // Group 2: The method name.
-    const methodPattern = /^(?!#|$)\s*((?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|virtual|override|async))\s+[\w<,>\s.()\[\]]*\s+([\w<>]+)\s*(?<params>\((?:[^()]|(\?&params))*\))(?:[\s\n]*where\s+[^\{]*)?)(?=\s*\{)/gm;
+    const methodPattern = /^(?!#|$)\s*((?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|virtual|override|async))\s+[\w<,>\s.()\?\[\]]*\s+([\w<>]+)\s*(?<params>\((?:[^()]|(\?&params))*\))(?:[\s\n]*where\s+[^\{]*)?)(?=\s*\{)/gm;
 
     let match;
     let matchNum = 1;
@@ -58,7 +57,7 @@ class CSharpRefactorer {
 
       const fullSignatureRaw = match[1];
       const methodName = match[2];
-      
+
       // Normalize whitespace in the signature to create a clean, consistent key
       const signatureKey = fullSignatureRaw.replace(/[\s\r\n]+/g, '').trim();
 
@@ -109,7 +108,7 @@ class CSharpRefactorer {
           const methodContent = (commentBlock.includes(this.classDeclaration) ? "" : commentBlock) + methodText;
           const lineCount = methodContent.split('\n').length;
           methods[signatureKey] = methodContent;
-          
+
           // Store method by name for easy lookup
           if (!methodsByName[methodName]) {
             methodsByName[methodName] = [];
@@ -149,7 +148,7 @@ class CSharpRefactorer {
 
     // Parse all classes first
     this.availableClasses = this.parseAllClasses(this.sourceCode);
-    
+
     if (this.availableClasses.length === 0) {
       throw new Error('No classes found in the source file');
     }
@@ -188,14 +187,14 @@ class CSharpRefactorer {
 
     // Use the target class content for method parsing
     const classContent = targetClass.content;
-    this.otherMembers = classContent;
+    // this.otherMembers = classContent;
     this.methods = this.parseCSharpMethods(classContent);
   }
 
   /**
    * Find method by name and return the best match
    * @param {string} methodName - Name of the method to find
-   * @returns {Object|null} Method object with signature and content, or null if not found
+   * @returns {Object|null} Method Array of object with signature and content, or null if not found
    */
   findMethodByName(methodName) {
     if (!this.methodsByName[methodName]) {
@@ -203,14 +202,16 @@ class CSharpRefactorer {
     }
 
     const methods = this.methodsByName[methodName];
-    
+
+    return methods;
+
     // Return the first non-processed method
     for (const method of methods) {
       if (!this.processedMethods.has(method.signatureKey)) {
         return method;
       }
     }
-    
+
     // If all methods are processed, return null
     return null;
   }
@@ -266,23 +267,9 @@ class CSharpRefactorer {
 
     // Write methods
     for (const methodName of partialClassConfig.methods) {
-      const methodInfo = this.findMethodByName(methodName);
+      const methodInfoList = this.findMethodByName(methodName);
 
-      if (methodInfo) {
-        // Mark this method as processed
-        this.markMethodAsProcessed(methodInfo.signatureKey);
-        
-        // Add method content
-        content += `${methodInfo.content}\n\n`;
-        
-        // Track line count
-        totalLines += methodInfo.lineCount;
-        
-        // Remove from otherMembers to avoid duplication
-        this.otherMembers = this.otherMembers.replace(methodInfo.content, '');
-        
-        processedMethods.push({ name: methodName, lines: methodInfo.lineCount });
-      } else {
+      if (!methodInfoList) {
         // Check if method exists but is already processed
         const allMethodsForName = this.methodsByName[methodName];
         if (allMethodsForName && allMethodsForName.length > 0) {
@@ -293,6 +280,24 @@ class CSharpRefactorer {
           errors.push(`Method '${methodName}' not found in source code.`);
         }
       }
+
+      for (let key in methodInfoList) {
+        let methodInfo = methodInfoList[key];
+        // Mark this method as processed
+        this.markMethodAsProcessed(methodInfo.signatureKey);
+
+        // Add method content
+        content += `${methodInfo.content}\n\n`;
+
+        // Track line count
+        totalLines += methodInfo.lineCount;
+
+        // Remove from sourceCode to avoid duplication
+        this.sourceCode = this.sourceCode.replace(methodInfo.content, '');
+
+        processedMethods.push({ name: methodName, lines: methodInfo.lineCount });
+      }
+
     }
 
     if (errors.length > 0) {
@@ -309,7 +314,7 @@ class CSharpRefactorer {
 
     // Calculate final line count including structure
     const finalLineCount = content.split('\n').length;
-    
+
     // Validate 5000-line limit
     if (finalLineCount > 5000) {
       const methodDetails = processedMethods.map(m => `  - ${m.name}: ${m.lines} lines`).join('\n');
@@ -327,7 +332,7 @@ class CSharpRefactorer {
    * @returns {string} Generated content for the main partial class file
    */
   generateMainPartialClass(newNamespace, mainClassName, mainInterface = '') {
-    let content = this.otherMembers;
+    let content = this.sourceCode;
 
     // Replace namespace
     if (this.oldNamespace) {
@@ -337,13 +342,22 @@ class CSharpRefactorer {
       );
     }
 
-    // Make class partial
-    content = content.replace(/public class/g, 'public partial class');
+    // Make the main class partial (extract class name from declaration)
+    const mainClassNameMatch = this.classDeclaration.match(/public\s+(?:\w+\s+)*?class\s+(\w+)/);
+    if (mainClassNameMatch) {
+      const mainClassName = mainClassNameMatch[1];
+      // Replace only the specific main class with partial
+      const mainClassPattern = new RegExp(`(public\\s+(?:\\w+\\s+)*?)class\\s+(${mainClassName})`, 'g');
+      content = content.replace(mainClassPattern, '$1partial class $2');
+    }
 
     // Add interface if specified
     if (mainInterface) {
-      const classPattern = /(public\s+partial\s+class\s+\w+(?:\s*<[^>{}]+>)?)/;
-      content = content.replace(classPattern, `$1 : ${mainInterface}`);
+      const mainClassNameForInterface = mainClassNameMatch ? mainClassNameMatch[1] : '';
+      if (mainClassNameForInterface) {
+        const classPattern = new RegExp(`(public\\s+(?:\\w+\\s+)*?partial\\s+class\\s+${mainClassNameForInterface}(?:\\s*<[^>{}]+>)?)`, 'g');
+        content = content.replace(classPattern, `$1 : ${mainInterface}`);
+      }
     }
 
     return content;
@@ -376,78 +390,78 @@ class CSharpRefactorer {
    */
   parseAllClasses(sourceCode) {
     const classes = [];
-    
+
     // Simple and fast pattern to find class declarations
     const classPattern = /(public\s+(?:\w+\s+)*?class\s+(\w+)(?:\s*<[^>{}]+>)?.*?)(?=\s*{)/g;
-    
+
     let match;
     while ((match = classPattern.exec(sourceCode)) !== null) {
       const fullDeclaration = match[1].trim();
       const className = match[2];
-      
+
       // Find the class body by tracking braces
       const classStartIndex = match.index;
       const braceIndex = sourceCode.indexOf('{', match.index + match[0].length);
-      
+
       if (braceIndex !== -1) {
         let braceCount = 1;
         let isInString = false;
         let isInComment = false;
         let isInLineComment = false;
         let escapeNext = false;
-        
+
         // Find the end of the class by matching braces
         for (let i = braceIndex + 1; i < sourceCode.length; i++) {
           const char = sourceCode[i];
           const nextChar = sourceCode[i + 1];
-          
+
           // Handle escaped characters
           if (escapeNext) {
             escapeNext = false;
             continue;
           }
-          
+
           if (char === '\\' && isInString) {
             escapeNext = true;
             continue;
           }
-          
+
           // Handle string literals
           if (char === '"' && !isInComment && !isInLineComment) {
             isInString = !isInString;
             continue;
           }
-          
+
           // Skip if we're in a string
           if (isInString) {
             continue;
           }
-          
+
           // Handle multi-line comments
           if (char === '/' && nextChar === '*' && !isInLineComment) {
             isInComment = true;
             i++; // Skip the '*'
             continue;
           }
-          
+
           if (char === '*' && nextChar === '/' && isInComment) {
             isInComment = false;
             i++; // Skip the '/'
             continue;
           }
-          
+
           // Handle single-line comments
           if (char === '/' && nextChar === '/' && !isInComment) {
             isInLineComment = true;
             i++; // Skip the second '/'
             continue;
           }
-          
+
           if ((char === '\n' || char === '\r') && isInLineComment) {
             isInLineComment = false;
             continue;
           }
-          
+
           // Count braces only if not in string or comment
           if (!isInComment && !isInLineComment) {
             if (char === '{') {
@@ -456,11 +470,11 @@ class CSharpRefactorer {
               braceCount--;
             }
           }
-          
+
           // Found the end of the class
           if (braceCount === 0) {
             const classContent = sourceCode.slice(classStartIndex, i + 1);
-            
+
             classes.push({
               name: className,
               declaration: fullDeclaration,
@@ -474,7 +488,7 @@ class CSharpRefactorer {
         }
       }
     }
-    
+
     return classes;
   }
 }
@@ -576,24 +590,24 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools:
-    [
-      {
-        name: 'list_csharp_classes',
-        description: 'List all classes found in a C# source file with their declarations and line counts. This helps identify which class should be processed for refactoring.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            source_file: {
-              type: 'string',
-              description: 'Absolute full path to the C# source file to analyze. Ex: C:\\Users\\user\\source\\MyProject\\MyFile.cs',
+      [
+        {
+          name: 'list_csharp_classes',
+          description: 'List all classes found in a C# source file with their declarations and line counts. This helps identify which class should be processed for refactoring.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              source_file: {
+                type: 'string',
+                description: 'Absolute full path to the C# source file to analyze. Ex: C:\\Users\\user\\source\\MyProject\\MyFile.cs',
+              },
             },
+            required: ['source_file'],
           },
-          required: ['source_file'],
         },
-      },
-      {
-        name: 'split_csharp_class',
-        description: `Split a C# class file into multiple partial class files based on simplified JSON configuration(s). Only method names are required in the configuration. Methods should be grouped by functionality or business logic.
+        {
+          name: 'split_csharp_class',
+          description: `Split a C# class file into multiple partial class files based on simplified JSON configuration(s). Only method names are required in the configuration. Methods should be grouped by functionality or business logic.
 
 SINGLE CONFIG EXAMPLE:
 {
@@ -659,36 +673,36 @@ NOTES:
 - Duplicate method assignments across configs will be handled gracefully
 - Each partial class is limited to 5000 lines maximum
 - Line counts are calculated and enforced automatically`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            config_file: {
-              type: 'string',
-              description: 'Absolute full path to the JSON configuration file OR comma-separated list of multiple config file paths. Ex: C:\\Users\\user\\config.json OR C:\\Users\\user\\config1.json,C:\\Users\\user\\config2.json',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              config_file: {
+                type: 'string',
+                description: 'Absolute full path to the JSON configuration file OR comma-separated list of multiple config file paths. Ex: C:\\Users\\user\\config.json OR C:\\Users\\user\\config1.json,C:\\Users\\user\\config2.json',
+              },
             },
+            required: ['config_file'],
           },
-          required: ['config_file'],
         },
-      },
-      {
-        name: 'list_csharp_methods',
-        description: 'List all method names found in a C# class file with line counts. This tool is useful for creating simplified configuration files and estimating partial class sizes.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            source_file: {
-              type: 'string',
-              description: 'Absolute full Path to the C# source file to analyze. Ex: C:\\Users\\user\\source\\MyProject\\MyClass.cs',
+        {
+          name: 'list_csharp_methods',
+          description: 'List all method names found in a C# class file with line counts. This tool is useful for creating simplified configuration files and estimating partial class sizes.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              source_file: {
+                type: 'string',
+                description: 'Absolute full Path to the C# source file to analyze. Ex: C:\\Users\\user\\source\\MyProject\\MyClass.cs',
+              },
+              target_class_name: {
+                type: 'string',
+                description: 'Optional: specific class name to analyze if the file contains multiple classes. If not specified, the first class found will be used.',
+              },
             },
-            target_class_name: {
-              type: 'string',
-              description: 'Optional: specific class name to analyze if the file contains multiple classes. If not specified, the first class found will be used.',
-            },
+            required: ['source_file'],
           },
-          required: ['source_file'],
         },
-      },
-    ],
+      ],
   };
 });
 
@@ -740,7 +754,7 @@ async function listCSharpMethodsSimple(source_file, target_class_name = null) {
 
   // Format methods information
   const methodNames = refactorer.getAvailableMethodNames();
-  
+
   if (methodNames.length === 0) {
     return {
       content: [
@@ -764,13 +778,13 @@ async function listCSharpMethodsSimple(source_file, target_class_name = null) {
     const methodOverloads = refactorer.methodsByName[methodName];
     const methodLines = methodOverloads[0].lineCount; // Use first overload for line count
     totalLines += methodLines;
-    
+
     methodsInfo.push(`${index + 1}. ${methodName} (${methodLines} lines)`);
-    
+
     if (methodOverloads.length > 1) {
       methodsInfo.push(`   (${methodOverloads.length} overloads)`);
     }
-    
+
     methodsInfo.push('');
   });
 
@@ -778,7 +792,7 @@ async function listCSharpMethodsSimple(source_file, target_class_name = null) {
   methodsInfo.push(`Total methods: ${methodNames.length}`);
   methodsInfo.push(`Total lines: ${totalLines}`);
   methodsInfo.push('');
-  
+
   // Show available classes if multiple classes exist
   if (refactorer.availableClasses.length > 1) {
     methodsInfo.push('Available classes in this file:');
@@ -786,7 +800,7 @@ async function listCSharpMethodsSimple(source_file, target_class_name = null) {
       methodsInfo.push(`  ${index + 1}. ${cls.name} (${cls.lineCount} lines)`);
     });
   }
-  
+
   return {
     content: [
       {
@@ -806,7 +820,7 @@ async function listCSharpClasses(source_file) {
 
   // Get available classes
   const classes = refactorer.getAvailableClasses();
-  
+
   if (classes.length === 0) {
     return {
       content: [
@@ -847,7 +861,7 @@ async function listCSharpClasses(source_file) {
 async function ProcessSplitCSharpclassSimple(config_file_input) {
   // Parse config file(s) - can be single file or comma-separated list
   const configFiles = config_file_input.split(',').map(file => file.trim());
-  
+
   // Merge all configuration files
   const config = await mergeConfigurations(configFiles);
 
@@ -873,7 +887,7 @@ async function ProcessSplitCSharpclassSimple(config_file_input) {
   results.push(`Processed ${configFiles.length} configuration file(s):`);
   configFiles.forEach(file => results.push(`  - ${file}`));
   results.push('');
-  
+
   // Show which class was processed if multiple classes exist
   if (refactorer.availableClasses.length > 1) {
     const processedClass = target_class_name || refactorer.availableClasses[0].name;
@@ -948,8 +962,6 @@ async function main() {
 
 // Run the server if this file is executed directly
 if (require.main === module) {
-  
-  // ProcessSplitCSharpclassSimple("C:\\Tools\\Split 4 with simple tool\\Config1_UserManagement.json,C:\\Tools\\Split 4 with simple tool\\Config2_OrganizationStructureCore.json,C:\\Tools\\Split 4 with simple tool\\Config3_OrganizationStructureExtended.json,C:\\Tools\\Split 4 with simple tool\\Config4_ServiceAreaManagement.json,C:\\Tools\\Split 4 with simple tool\\Config5_DepartmentOperations.json,C:\\Tools\\Split 4 with simple tool\\Config6_ExcelExportOperations.json,C:\\Tools\\Split 4 with simple tool\\Config7_InvestmentsManagement.json,C:\\Tools\\Split 4 with simple tool\\Config8_AzureCloudOperations.json,C:\\Tools\\Split 4 with simple tool\\Config9_BudgetManagement.json,C:\\Tools\\Split 4 with simple tool\\Config10_ActionTypeManagement.json,C:\\Tools\\Split 4 with simple tool\\Config11_TemplateConfigurationManagement.json,C:\\Tools\\Split 4 with simple tool\\Config12_PublishingNodeOperations.json,C:\\Tools\\Split 4 with simple tool\\Config13_TextProcessingUtilities.json,C:\\Tools\\Split 4 with simple tool\\Config14_ColorVisualManagement.json,C:\\Tools\\Split 4 with simple tool\\Config15_JobManagementApplicationFlags.json,C:\\Tools\\Split 4 with simple tool\\Config16_AdjustmentCodeManagement.json,C:\\Tools\\Split 4 with simple tool\\Config17_MiscellaneousOperations.json,C:\\Tools\\Split 4 with simple tool\\Config18_DataProcessingOperations.json,C:\\Tools\\Split 4 with simple tool\\Config19_UtilityMiscellaneous.json");
 
   main().catch((error) => {
     console.error('Server error:', error);
