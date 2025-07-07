@@ -1,4 +1,4 @@
-# C# Refactorer MCP Servers
+#C# Refactorer MCP Servers (70% Generated with Copilot Agent [Claude 4 Sonnet] including tests)
 
 This repository contains two MCP (Model Context Protocol) servers for C# class refactoring:
 
