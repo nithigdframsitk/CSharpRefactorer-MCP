@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSharpAnalyzer", "CSharpAnalyzer\CSharpAnalyzer.csproj", "{DA90A3A5-06F2-85FE-1FA7-2632F97C4C26}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DA90A3A5-06F2-85FE-1FA7-2632F97C4C26}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DA90A3A5-06F2-85FE-1FA7-2632F97C4C26}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DA90A3A5-06F2-85FE-1FA7-2632F97C4C26}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DA90A3A5-06F2-85FE-1FA7-2632F97C4C26}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {EA624C88-F577-41F6-8F8C-C4E7C16D2893}
+	EndGlobalSection
+EndGlobal

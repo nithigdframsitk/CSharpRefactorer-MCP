@@ -1,12 +1,20 @@
-# C# Refactorer MCP Servers
+# Enhanced C# Refactorer MCP Server
 
-This repository contains two MCP (Model Context Protocol) servers for C# class refactoring:
+This repository contains an advanced MCP (Model Context Protocol) server for C# class analysis and refactoring with dual analysis engines:
 
-1. **csharp_refactorer.js** - Original server with full method signature configuration
-2. **csharp_refactorer_simple.js** - New simplified server with method name-only configuration
+1. **enhanced_csharp_refactorer.js** - Advanced server with Roslyn analyzer and regex fallback
+2. **csharp_refactorer.js** - Original regex-based server (for backward compatibility)
+3. **CSharpAnalyzer/** - .NET Roslyn-based analyzer for semantic analysis
 
 ## Features
 
+### Enhanced Analysis Capabilities
+- **Dual Analysis Engines**: Roslyn-based semantic analysis with regex fallback
+- **Cross-file Analysis**: Project-wide dependency tracking and analysis
+- **Semantic Understanding**: Accurate type information and inheritance tracking
+- **Method Dependency Trees**: Deep analysis of method call hierarchies
+
+### Refactoring Features
 - Split large C# classes into multiple partial class files
 - Group methods by functionality or business logic
 - Support for multiple configuration files
@@ -14,11 +22,38 @@ This repository contains two MCP (Model Context Protocol) servers for C# class r
 - Validation and error handling
 - Namespace and interface management
 
+### Analysis Tools
+- List classes with inheritance and type information
+- List methods with detailed signatures and parameters
+- Build comprehensive dependency trees
+- Cross-file and project-wide analysis support
+
 ## Installation
 
 ```bash
 npm install
 ```
+
+### Building the Roslyn Analyzer (Recommended)
+
+For enhanced analysis capabilities, build the .NET Roslyn analyzer:
+
+```bash
+cd CSharpAnalyzer
+dotnet restore
+dotnet build
+```
+
+**Requirements:**
+- .NET 8.0 SDK or later
+- Windows, Linux, or macOS
+
+**Benefits after building:**
+- Cross-file and project-wide analysis
+- Semantic understanding of C# code
+- Accurate dependency tracking
+- Support for complex C# features (generics, inheritance, etc.)
+- Integration with MSBuild project system
 
 ## Setup AI Agent Configuration for MCP Server
 
@@ -29,11 +64,11 @@ To integrate this C# Refactorer MCP Server with your AI Agent, add the following
 ```json
 {
   "mcpServers": {
-    "csharp_refactorer": {
+    "enhanced_csharp_refactorer": {
       "type": "stdio",
       "command": "node",
       "args": [
-        "C:\\Path\\To\\Your\\MCP-Servers\\csharp_refactorer.js"
+        "C:\\Path\\To\\Your\\MCP-Servers\\enhanced_csharp_refactorer.js"
       ]
     }
   }
@@ -42,17 +77,18 @@ To integrate this C# Refactorer MCP Server with your AI Agent, add the following
 
 ### Configuration Details
 
-- **Server Name**: `csharp_refactorer` - This is the identifier your AI agent will use to reference this server
+- **Server Name**: `enhanced_csharp_refactorer` - This is the identifier your AI agent will use to reference this server
 - **Type**: `stdio` - Uses standard input/output for communication with the MCP server
 - **Command**: `node` - Runs the server using Node.js
-- **Args**: Array containing the absolute path to the `csharp_refactorer.js` file
+- **Args**: Array containing the absolute path to the `enhanced_csharp_refactorer.js` file
 
 ### Important Notes
 
-1. **Use Absolute Paths**: Replace `"C:\\Path\\To\\Your\\MCP-Servers\\csharp_refactorer.js"` with the actual absolute path to your MCP server script
+1. **Use Absolute Paths**: Replace `"C:\\Path\\To\\Your\\MCP-Servers\\enhanced_csharp_refactorer.js"` with the actual absolute path to your MCP server script
 2. **Path Format**: Use double backslashes (`\\`) in JSON for Windows paths, or forward slashes (`/`) for cross-platform compatibility
 3. **Node.js Required**: Ensure Node.js is installed and accessible in your system PATH
 4. **Restart Required**: After adding this configuration, restart your AI agent to load the new MCP server
+5. **Optional .NET**: For enhanced capabilities, build the Roslyn analyzer (see Installation section)
 
 ### Example for Different AI Agents
 
@@ -61,10 +97,10 @@ Add to your Claude Desktop configuration file (typically located in your user pr
 ```json
 {
   "mcpServers": {
-    "csharp_refactorer": {
+    "enhanced_csharp_refactorer": {
       "type": "stdio", 
       "command": "node",
-      "args": ["C:\\Tools\\MCP-Servers\\csharp_refactorer.js"]
+      "args": ["C:\\Tools\\MCP-Servers\\enhanced_csharp_refactorer.js"]
     }
   }
 }
@@ -78,7 +114,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 const transport = new StdioClientTransport({
   command: 'node',
-  args: ['C:\\Tools\\MCP-Servers\\csharp_refactorer.js']
+  args: ['C:\\Tools\\MCP-Servers\\enhanced_csharp_refactorer.js']
 });
 
 const client = new Client({
@@ -92,19 +128,71 @@ await client.connect(transport);
 ```
 
 Once configured, your AI agent will have access to the following tools:
-- `build_dependency_tree` - Analyze method dependencies and call hierarchies
-- `get_method_body` - Retrieve complete method implementations
-- `find_method_callers` - Find all methods that call a specific method
-- `get_method_statistics` - Get comprehensive method complexity metrics
-- `list_csharp_classes` - List all classes in a C# file
-- `list_csharp_methods` - List all methods with line counts
-- `split_csharp_class` - Split large classes into logical partial classes
+- `enhanced_list_csharp_classes` - List classes with Roslyn analysis (inheritance, types, etc.)
+- `enhanced_list_csharp_methods` - List methods with detailed signatures and semantic info
+- `enhanced_build_dependency_tree` - Build comprehensive dependency trees with cross-file analysis
+- `get_analyzer_status` - Check Roslyn analyzer status and build instructions
+- `split_csharp_class` - Split large classes into logical partial classes (backward compatibility)
 
 ## Usage
 
-### Original Server (Full Signatures)
+### Enhanced Server (Recommended)
 
-The original server requires full method signatures in the configuration:
+The enhanced server provides dual analysis engines - Roslyn and regex fallback:
+
+```bash
+node enhanced_csharp_refactorer.js
+```
+
+**Available Tools:**
+
+1. **enhanced_list_csharp_classes** - List classes with inheritance and type information
+   ```json
+   {
+     "source_path": "C:\\Path\\To\\YourFile.cs",
+     "is_project": false
+   }
+   ```
+
+2. **enhanced_list_csharp_methods** - List methods with detailed signatures
+   ```json
+   {
+     "source_path": "C:\\Path\\To\\YourFile.cs", 
+     "class_name": "YourClassName",
+     "is_project": false
+   }
+   ```
+
+3. **enhanced_build_dependency_tree** - Build comprehensive dependency trees
+   ```json
+   {
+     "source_path": "C:\\Path\\To\\YourFile.cs",
+     "class_name": "YourClassName", 
+     "method_name": "YourMethodName",
+     "max_depth": 3,
+     "is_project": false
+   }
+   ```
+
+4. **get_analyzer_status** - Check Roslyn analyzer availability
+   ```json
+   {}
+   ```
+
+### Project-Wide Analysis
+
+For project-wide analysis, set `is_project: true` and provide a .csproj file:
+
+```json
+{
+  "source_path": "C:\\Path\\To\\YourProject.csproj",
+  "is_project": true
+}
+```
+
+### Legacy Server (Backward Compatibility)
+
+The original regex-based server is still available:
 
 ```bash
 node csharp_refactorer.js
@@ -202,7 +290,51 @@ Configuration example:
 6. **Line Count Tracking**: Shows individual method line counts for better planning
 7. **Automatic Size Enforcement**: Prevents partial classes from exceeding 5000 lines
 
-## Example Workflow
+## Testing
+
+The project includes comprehensive tests located in the `tests/` directory:
+
+```
+tests/
+├── configs/                     # Test configuration files
+├── sample-files/                # C# test files for analysis
+├── output/                      # Test output directories
+├── README.md                    # Testing documentation
+└── *.js                        # Test scripts
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+node tests/run_tests.js
+
+# Run specific test suites
+node tests/e2e_test.js           # End-to-end tests
+node tests/integration_tests.js  # Integration tests
+node tests/test_master_suite.js  # Master test suite
+
+# Debug tests
+node tests/debug_mcp.js          # Debug MCP server
+node tests/debug_parse.js        # Debug parser
+```
+
+## Project Structure
+
+```
+MCP-Servers/
+├── enhanced_csharp_refactorer.js    # Main enhanced server (Roslyn + regex)
+├── csharp_refactorer.js             # Original regex-based server  
+├── CSharpAnalyzer/                  # .NET Roslyn analyzer
+│   ├── CSharpAnalyzer.csproj        # Project file
+│   ├── Program.cs                   # Main analyzer logic
+│   ├── bin/                         # Compiled analyzer
+│   └── obj/                         # Build artifacts
+├── tests/                           # Test suite (see tests/README.md)
+├── package.json                     # Node.js dependencies
+├── README.md                        # This file
+└── ADVANCED_FEATURES.md             # Advanced usage documentation
+```
 
 1. **Analyze Source File**:
    ```bash

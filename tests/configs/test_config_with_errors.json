@@ -1,0 +1,23 @@
+{
+    "sourceFile": "c:\\Tools\\MCP-Servers\\test_validation.cs",
+    "destinationFolder": "c:\\Tools\\MCP-Servers\\test_output_validation",
+    "newNamespace": "Test.Validation",
+    "mainPartialClassName": "TestValidation.Core.cs",
+    "partialClasses": [
+        {
+            "fileName": "TestValidation.Part1.cs",
+            "methods": [
+                "ExistingMethod1",
+                "NonExistentMethod1",
+                "ExistingMethod2"
+            ]
+        },
+        {
+            "fileName": "TestValidation.Part2.cs",
+            "methods": [
+                "ExistingMethod3",
+                "NonExistentMethod2"
+            ]
+        }
+    ]
+}

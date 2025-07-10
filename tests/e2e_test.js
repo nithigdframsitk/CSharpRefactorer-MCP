@@ -33,7 +33,7 @@ async function runEndToEndTest() {
         // Step 2: Create refactorer instance and parse source
         console.log('\nStep 2: Creating refactorer and parsing source...');
         const refactorer = new CSharpRefactorer();
-        await refactorer.parseSourceFile('./test_sample.cs');
+        await refactorer.parseSourceFile('./sample-files/test_sample.cs');
         
         const methodCount = Object.keys(refactorer.methods).length;
         console.log(`✅ Parsed ${methodCount} methods from source file`);
@@ -165,7 +165,7 @@ async function runEndToEndTest() {
         console.log('\nStep 8: Testing duplicate method handling...');
         
         const refactorer2 = new CSharpRefactorer();
-        await refactorer2.parseSourceFile('./test_sample.cs');
+        await refactorer2.parseSourceFile('./sample-files/test_sample.cs');
         
         // First process some methods
         const firstConfig = {

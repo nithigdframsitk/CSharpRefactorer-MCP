@@ -20,7 +20,7 @@ async function testMCPServerFunctionality() {
         const refactorer = new CSharpRefactorer();
         
         // Parse the source file
-        await refactorer.parseSourceFile('./test_sample.cs');
+        await refactorer.parseSourceFile('./sample-files/test_sample.cs');
         
         // Test method listing
         const methodNames = refactorer.getAvailableMethodNames();
