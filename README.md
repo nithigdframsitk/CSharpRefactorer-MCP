@@ -1,10 +1,9 @@
-# Enhanced C# Refactorer MCP Server
+# C# Refactorer MCP Servers (70% of the code is generated with Copilot Agent [Claude 4 Sonnet] including tests)
 
 This repository contains an advanced MCP (Model Context Protocol) server for C# class analysis and refactoring with dual analysis engines:
 
-1. **enhanced_csharp_refactorer.js** - Advanced server with Roslyn analyzer and regex fallback
-2. **csharp_refactorer.js** - Original regex-based server (for backward compatibility)
-3. **CSharpAnalyzer/** - .NET Roslyn-based analyzer for semantic analysis
+1. **csharp_refactorer_original.js** - Original server with full method signature configuration
+2. **csharp_refactorer.js** - New simplified server with method name-only configuration
 
 ## Features
 
@@ -22,11 +21,11 @@ This repository contains an advanced MCP (Model Context Protocol) server for C# 
 - Validation and error handling
 - Namespace and interface management
 
-### Analysis Tools
-- List classes with inheritance and type information
-- List methods with detailed signatures and parameters
-- Build comprehensive dependency trees
-- Cross-file and project-wide analysis support
+## Future Plans for Updates on this MCP Tool
+
+- Planning to add tools that could create a dependency tree useful for indexing the application for an AI Agent to refer to.
+- Concept: Every task/story will start from the parent method (it can be a Controller method). When the Agent starts the task, it will begin by finding all the places where the code needs to be updated with the help of the dependency tree. This is very helpful for very large projects.
+- Tool to get the method body by method name and class name.
 
 ## Installation
 
